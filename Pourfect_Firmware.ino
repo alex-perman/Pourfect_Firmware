@@ -10,6 +10,9 @@
 #include <Adafruit_PCF8574.h>
 
 #include <ItemSubMenu.h>
+#include <ItemToggle.h>
+#include <ItemInput.h>
+#include <ItemCommand.h>
 #include <LcdMenu.h>
 #include <utils/commandProccesors.h>
 
@@ -18,7 +21,7 @@
 
 #include <PID_v1.h>
 
-#include <RotaryEncoder.h>
+//#include <rotaryDecoder.h>
 
 // Pin Definitions
 #define SERVO_0     5   // PD5
@@ -58,27 +61,42 @@ Servo infServo;
 
 Adafruit_PCF8574 pcf;
 
-RotaryEncoder *encoder = nullptr;
+//rotaryDecoder decoder(0x21);        // PCF Address: 0x21
+
+// Rotary Encoder
+int RE_pos = 0;
+int aState;
+int aLastState;  
 
 // LCD ****************************
 #define LCD_ROWS  2
 #define LCD_COLS  16
-#define UP        56
-#define DOWN      50
-#define ENTER     53
-#define BACK      55
+#define UP        0
+#define DOWN      1
+#define LEFT      2
+#define RIGHT     3
+#define ENTER     4
+#define BACK      5
+#define CLEAR     6
+#define BACKSPACE 7
 extern MenuItem* settingsMenu[];
+// Declare the call back function
+void toggleBacklight(uint16_t isOn);
+void backButton();
+void preTeaMenu();
 // Define Main Menu
 MAIN_MENU(
-  ITEM_BASIC("Make Tea"),
+  ITEM_COMMAND("Make Tea", preTeaMenu),
   ITEM_SUBMENU("Settings", settingsMenu),
   ITEM_BASIC("About Us...")
 );
 // Settings Sub Menu
 SUB_MENU(settingsMenu, mainMenu,
+  ITEM_COMMAND("Back...", backButton),
   ITEM_BASIC("Steeping Time"),
   ITEM_BASIC("Steeping Temp"),
-  ITEM_BASIC("Cleaning Cycle")
+  ITEM_BASIC("Cleaning Cycle"),
+  ITEM_TOGGLE("Backlight", toggleBacklight)
 );
 LcdMenu menu(LCD_ROWS, LCD_COLS);
 
@@ -96,10 +114,10 @@ unsigned long startMillis;
 unsigned long currentMillis;
 const unsigned long steepingTime = STEEPING_MINS*60*1000;
 
-// Rotary Encoder
-void checkRE() {    
-  encoder->tick();    // check RE State
-}
+//// Rotary Encoder
+//void checkRE() {    
+//  encoder->tick();    // check RE State
+//}
 
 void setup() {
   S_leaf.begin(100, 1);
@@ -120,19 +138,17 @@ void setup() {
 
   while (!Serial) { delay(10); }
   Serial.begin(115200);
+  Serial.println("Pourfect Tea DEBUG");
 
-  if (!pcf.begin(0x20, &Wire)) {
+  if (!pcf.begin(0x21, &Wire)) {
     Serial.println("Couldn't find PCF8574");
     while (1);
   }
-  for (uint8_t p=0; p<8; p++) {
+  for (uint8_t p=2; p<8; p++) {
     pcf.pinMode(p, INPUT_PULLUP);
   }
-
-  // TWO03 mode when PIN_IN1, PIN_IN2 signals are both LOW or HIGH in latch position
-  encoder = new RotaryEncoder(RE_CLK, RE_DT, RotaryEncoder::LatchMode::TWO03);
-  // Register intererrupt routine
-  attachInterrupt(digitalPinToInterrupt(INT), checkRE, CHANGE);
+   // Reads the initial state of the outputA
+   aLastState = pcf.digitalRead(RE_CLK); 
 }
 
 void stepperHome() {
@@ -279,20 +295,46 @@ void makeTea() {
 
 void loop() {
   int command;
-  static int pos = 0;
+  
+  //  Check RE
+  aState = pcf.digitalRead(RE_CLK); // Reads the "current" state of the outputA
+  // If the previous and the current state of the outputA are different, that means a Pulse has occured
+  if (aState != aLastState){     
+    // If the outputB state is different to the outputA state, that means the encoder is rotating clockwise
+    if (pcf.digitalRead(RE_DT) != aState) { 
+      RE_pos ++;    // UP
+      if (RE_pos % 2 == 0) {
+        command = DOWN;
+        Serial.print("Position: ");
+        Serial.println(RE_pos);
+        processMenuCommand(menu, command, UP, DOWN, LEFT, RIGHT, ENTER, BACK, CLEAR, BACKSPACE);
+      }
+    } else {
+      RE_pos --;
+      if (RE_pos % 2 == 0) {
+        command = UP;
+        Serial.print("Position: ");
+        Serial.println(RE_pos);
+        processMenuCommand(menu, command, UP, DOWN, LEFT, RIGHT, ENTER, BACK, CLEAR, BACKSPACE);
+      }
+    }
+  } 
+  aLastState = aState; // Updates the previous state of the outputA with the current state
 
-  encoder->tick();
-  int newPos = encoder->getPosition();
-  if (pos != newPos) {
-    if (newPos < pos) {
-      command = DOWN;
+  if (! pcf.digitalRead(RE_SW)) {
+    Serial.println("CLICK!");
+    command = ENTER;
+    processMenuCommand(menu, command, UP, DOWN, LEFT, RIGHT, ENTER, BACK, CLEAR, BACKSPACE);
+    while (! pcf.digitalRead(RE_SW)) {
     }
-    else if (newPos > pos) {
-      command = UP;
-    }
-    pos = newPos;
+  delay(10);
   }
 
-  processMenuCommand(menu, command, UP, DOWN, ENTER, BACK);
+}
 
+// LCD COMMANDS
+void toggleBacklight(uint16_t isOn) { menu.setBacklight(isOn); }
+void backButton() {processMenuCommand(menu, BACK, UP, DOWN, LEFT, RIGHT, ENTER, BACK, CLEAR, BACKSPACE); }
+void preTeaMenu() {
+  Serial.println("Making Tea!");
 }
