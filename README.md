@@ -4,7 +4,7 @@ This code is the firmware for UBC IGEN430 Capstone project.
 
 Uses custom  designed PCB. 
 
-# UI
+## UI
 
 2x16 LCD Display @ I2C: 0x20
 
