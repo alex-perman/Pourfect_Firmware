@@ -16,7 +16,6 @@
 #include <LcdMenu.h>
 #include <utils/commandProccesors.h>
 
-#include <Adafruit_PCF8574.h>
 #include <Servo.h>
 
 #include <PID_v1.h>
