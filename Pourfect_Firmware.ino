@@ -51,9 +51,9 @@ A4988 S_leaf(STEPPER_STEPS, LEAF_DIR, LEAF_STEP);
 A4988 S_inf(STEPPER_STEPS, INF_DIR, INF_STEP);
 
 Servo T_Servo;
-#define T_CLOSED 100
-#define T_OPEN 30
-#define T_WASTE 150
+#define T_CLOSED 75
+#define T_OPEN 165
+#define T_WASTE 0
 Servo infServo;
 #define INF_DUMP 150
 #define INF_UP 0
@@ -83,11 +83,13 @@ extern MenuItem* settingsMenu[];
 void toggleBacklight(uint16_t isOn);
 void backButton();
 void preTeaMenu();
+void demoRoutine();
 // Define Main Menu
 MAIN_MENU(
   ITEM_COMMAND("Make Tea", preTeaMenu),
   ITEM_SUBMENU("Settings", settingsMenu),
-  ITEM_BASIC("About Us...")
+  ITEM_BASIC("About Us..."),
+  ITEM_COMMAND("DEMO!", demoRoutine)
 );
 // Settings Sub Menu
 SUB_MENU(settingsMenu, mainMenu,
@@ -119,8 +121,8 @@ const unsigned long steepingTime = STEEPING_MINS*60*1000;
 //}
 
 void setup() {
-  S_leaf.begin(100, 1);
-  S_inf.begin(100, 1);
+  S_leaf.begin(150, 1);
+  S_inf.begin(150, 1);
   T_Servo.attach(SERVO_0);
   infServo.attach(SERVO_1);
 
@@ -143,9 +145,9 @@ void setup() {
     Serial.println("Couldn't find PCF8574");
     while (1);
   }
-  for (uint8_t p=2; p<8; p++) {
-    pcf.pinMode(p, INPUT_PULLUP);
-  }
+//  for (uint8_t p=2; p<8; p++) {           // IF YOU PUT THIS ON RELAYS BREAK IDK WHY
+//    pcf.pinMode(p, INPUT_PULLUP);
+//  }
    // Reads the initial state of the outputA
    aLastState = pcf.digitalRead(RE_CLK); 
 }
@@ -154,20 +156,22 @@ void stepperHome() {
   int infHB = pcf.digitalRead(INF_LIMIT); 
   int leafHB = pcf.digitalRead(LEAF_LIMIT);
   
-  while (infHB == HIGH)
+  while (infHB == LOW)
   {
     //backwards slowly till it hits the switch and stops
-    S_inf.rotate(-100);
+    S_inf.rotate(30);
     infHB = pcf.digitalRead(INF_LIMIT);
   }
   inf_disp = 0;
 
-  while (leafHB == HIGH)
+  while (leafHB == LOW)
   {
-    S_leaf.rotate(-100);
+    S_leaf.rotate(30);
     leafHB = pcf.digitalRead(LEAF_LIMIT);
   }
   leaf_disp = 0;
+
+  infServo.write(0);
 }
 
 void moveInfuser(int pos) {
@@ -179,10 +183,10 @@ void moveInfuser(int pos) {
     inf_pos = 0;      // Home position
   }
   else if (pos = 1) {
-    inf_pos = 2000;   // Steeping Position
+    inf_pos = -1*180;   // Steeping Position
   }
   else if (pos = 2) {
-    inf_pos = 1000;   // Cleaning Position
+    inf_pos = 0;   // Cleaning Position
   }
 
   if (inf_disp < inf_pos) {
@@ -200,7 +204,7 @@ void moveInfuser(int pos) {
 
 void dispenseLeaf() {
   if (leaf_disp == 0) {
-    S_leaf.rotate(5*360);
+    S_leaf.rotate(-5*360);
     int i;
 
     for (i = 0; i < 5; i++) {   // Shake leaves into volumetric measure
@@ -209,7 +213,7 @@ void dispenseLeaf() {
     }
 
     delay(1000);
-    S_leaf.rotate(-5*360);
+    S_leaf.rotate(5*360);
 
     for (i = 0; i < 5; i++) {   // Shake leaves into infuser
       S_leaf.rotate(5);
@@ -225,7 +229,7 @@ void T_junct(int pos) {
   }
   else if (pos = 1) {
     T_Servo.write(T_OPEN);
-    delay(10000);             // wait 10s
+    delay(1000);             // wait 2s
   }
   else if (pos = 2) {
     T_Servo.write(T_WASTE);
@@ -336,4 +340,19 @@ void toggleBacklight(uint16_t isOn) { menu.setBacklight(isOn); }
 void backButton() {processMenuCommand(menu, BACK, UP, DOWN, LEFT, RIGHT, ENTER, BACK, CLEAR, BACKSPACE); }
 void preTeaMenu() {
   Serial.println("Making Tea!");
+}
+void demoRoutine() {
+  stepperHome();        // Home steppers
+  moveInfuser(0);       // Raise infuser to load leaves
+  dispenseLeaf();       // Portion leaves into infuser
+  T_junct(0);           // Close T_junction
+  //moveInfuser(1);       // Lower infuser to steeping position
+  S_inf.rotate(-2*360);
+  delay(2000);            // Delay 2s
+  //steepTea();           // Blow out lines and steep tea for steeping time
+  T_junct(1);           // Pour steeped tea into cup
+  T_junct(0);           // Close T-Junction
+  //moveInfuser(2);       // Bring infuser up to cleaning pos
+  S_inf.rotate(2*360);
+  //washCycle();          // Clean machine for next cup
 }
