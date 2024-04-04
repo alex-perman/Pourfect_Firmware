@@ -121,8 +121,8 @@ const unsigned long steepingTime = STEEPING_MINS*60*1000;
 //}
 
 void setup() {
-  S_leaf.begin(150, 1);
-  S_inf.begin(150, 1);
+  S_leaf.begin(100, 1);
+  S_inf.begin(100, 1);
   T_Servo.attach(SERVO_0);
   infServo.attach(SERVO_1);
 
@@ -204,7 +204,7 @@ void moveInfuser(int pos) {
 
 void dispenseLeaf() {
   if (leaf_disp == 0) {
-    S_leaf.rotate(-5*360);
+    S_leaf.rotate(-8*360);
     int i;
 
     for (i = 0; i < 5; i++) {   // Shake leaves into volumetric measure
@@ -213,7 +213,7 @@ void dispenseLeaf() {
     }
 
     delay(1000);
-    S_leaf.rotate(5*360);
+    S_leaf.rotate(8*360);
 
     for (i = 0; i < 5; i++) {   // Shake leaves into infuser
       S_leaf.rotate(5);
@@ -347,12 +347,13 @@ void demoRoutine() {
   dispenseLeaf();       // Portion leaves into infuser
   T_junct(0);           // Close T_junction
   //moveInfuser(1);       // Lower infuser to steeping position
-  S_inf.rotate(-2*360);
+  S_inf.rotate(-6*360);
   delay(2000);            // Delay 2s
   //steepTea();           // Blow out lines and steep tea for steeping time
   T_junct(1);           // Pour steeped tea into cup
+  delay(1000);
   T_junct(0);           // Close T-Junction
   //moveInfuser(2);       // Bring infuser up to cleaning pos
-  S_inf.rotate(2*360);
+  S_inf.rotate(6*360);
   //washCycle();          // Clean machine for next cup
 }
