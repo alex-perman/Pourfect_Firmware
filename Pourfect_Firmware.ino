@@ -55,7 +55,7 @@ Servo T_Servo;
 #define T_OPEN 165
 #define T_WASTE 0
 Servo infServo;
-#define INF_DUMP 150
+#define INF_DUMP 145
 #define INF_UP 0
 
 Adafruit_PCF8574 pcf;
@@ -84,6 +84,7 @@ void toggleBacklight(uint16_t isOn);
 void backButton();
 void preTeaMenu();
 void demoRoutine();
+void stepperHome();
 // Define Main Menu
 MAIN_MENU(
   ITEM_COMMAND("Make Tea", preTeaMenu),
@@ -97,6 +98,7 @@ SUB_MENU(settingsMenu, mainMenu,
   ITEM_BASIC("Steeping Time"),
   ITEM_BASIC("Steeping Temp"),
   ITEM_BASIC("Cleaning Cycle"),
+  ITEM_COMMAND("Home Steppers", stepperHome),
   ITEM_TOGGLE("Backlight", toggleBacklight)
 );
 LcdMenu menu(LCD_ROWS, LCD_COLS);
@@ -121,7 +123,7 @@ const unsigned long steepingTime = STEEPING_MINS*60*1000;
 //}
 
 void setup() {
-  S_leaf.begin(100, 1);
+  S_leaf.begin(150, 1);
   S_inf.begin(100, 1);
   T_Servo.attach(SERVO_0);
   infServo.attach(SERVO_1);
@@ -155,6 +157,8 @@ void setup() {
 void stepperHome() {
   int infHB = pcf.digitalRead(INF_LIMIT); 
   int leafHB = pcf.digitalRead(LEAF_LIMIT);
+
+  //S_inf.rotate(-360);
   
   while (infHB == LOW)
   {
@@ -182,21 +186,29 @@ void moveInfuser(int pos) {
   if (pos == 0) {
     inf_pos = 0;      // Home position
   }
-  else if (pos = 1) {
-    inf_pos = -1*180;   // Steeping Position
+  else if (pos == 1) {
+    inf_pos = -6*360;   // Steeping Position
   }
-  else if (pos = 2) {
-    inf_pos = 0;   // Cleaning Position
+  else if (pos == 2) {
+    inf_pos = -2.75*360;   // Cleaning Position
   }
 
   if (inf_disp < inf_pos) {
     while (inf_disp < inf_pos) {
-      S_inf.rotate(100);
+      S_inf.rotate(30);
+      inf_disp = inf_disp + 30;
+//      if (pcf.digitalRead(INF_LIMIT) == HIGH) {
+//        break;
+//      }
     }
   }
   else if (inf_disp > inf_pos) {
     while (inf_disp > inf_pos) {
-      S_inf.rotate(-100);
+      S_inf.rotate(-30);
+      inf_disp = inf_disp - 30;
+//      if (pcf.digitalRead(INF_LIMIT) == HIGH) {
+//        break;
+//      }
     }
   }
 
@@ -204,20 +216,26 @@ void moveInfuser(int pos) {
 
 void dispenseLeaf() {
   if (leaf_disp == 0) {
-    S_leaf.rotate(-8*360);
+    S_leaf.rotate(-18*360);
+    delay(1000);
+    
     int i;
-
-    for (i = 0; i < 5; i++) {   // Shake leaves into volumetric measure
-      S_leaf.rotate(5);
-      S_leaf.rotate(-5);
+    for (i = 0; i < 100; i++) {   // Shake leaves into volumetric measure
+      S_leaf.rotate(10);
+      delay(5);
+      S_leaf.rotate(-10);
+      delay(5);
     }
 
     delay(1000);
-    S_leaf.rotate(8*360);
+    S_leaf.rotate(18*360);
+    delay(1000);
 
-    for (i = 0; i < 5; i++) {   // Shake leaves into infuser
-      S_leaf.rotate(5);
-      S_leaf.rotate(-5);
+    for (i = 0; i < 100; i++) {   // Shake leaves into infuser
+      S_leaf.rotate(10);
+      delay(5);
+      S_leaf.rotate(-10);
+      delay(5);
     }
   }
   
