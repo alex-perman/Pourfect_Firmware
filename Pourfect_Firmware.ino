@@ -60,7 +60,12 @@ Servo infServo;
 
 Adafruit_PCF8574 pcf;
 
-//rotaryDecoder decoder(0x21);        // PCF Address: 0x21
+// Thermistor Setup
+int Vo;
+float R1 = 100000;    // 100K Thermistor
+float logR2, R2, T;
+float c1 = 4.695312999e-03, c2 = -3.891975075e-04, c3 = 20.63019751e-07;
+// Steinhart-Hart
 
 // Rotary Encoder
 int RE_pos = 0;
@@ -79,18 +84,24 @@ int aLastState;
 #define CLEAR     6
 #define BACKSPACE 7
 extern MenuItem* settingsMenu[];
+extern MenuItem* demoMenu[];
 // Declare the call back function
 void toggleBacklight(uint16_t isOn);
 void backButton();
 void preTeaMenu();
 void demoRoutine();
 void stepperHome();
+void infDemo();
+void leafDemo();
+void T_Demo();
+void waterDemo();
+
 // Define Main Menu
 MAIN_MENU(
   ITEM_COMMAND("Make Tea", preTeaMenu),
   ITEM_SUBMENU("Settings", settingsMenu),
   ITEM_BASIC("About Us..."),
-  ITEM_COMMAND("DEMO!", demoRoutine)
+  ITEM_SUBMENU("DEMO", demoMenu)
 );
 // Settings Sub Menu
 SUB_MENU(settingsMenu, mainMenu,
@@ -101,18 +112,27 @@ SUB_MENU(settingsMenu, mainMenu,
   ITEM_COMMAND("Home Steppers", stepperHome),
   ITEM_TOGGLE("Backlight", toggleBacklight)
 );
+// Demo Sub Menu
+SUB_MENU(demoMenu, mainMenu, 
+  ITEM_COMMAND("Infuser", infDemo),
+  ITEM_COMMAND("Leaf", leafDemo),
+  ITEM_COMMAND("T Junction", T_Demo),
+  ITEM_COMMAND("Water", waterDemo),
+  ITEM_COMMAND("Routine", demoRoutine)
+);
 LcdMenu menu(LCD_ROWS, LCD_COLS);
 
 // Globals
 int inf_disp;
 int leaf_disp;
 
+// PID
 double waterTemp, thermTemp, pumpSpeed;
 double Kp=2, Ki=0, Kd=0;
 PID steepingTemp(&thermTemp, &pumpSpeed, &waterTemp, Kp, Ki, Kd, DIRECT);
 #define POUR_VOLUME 250   // mL of tea steeped
 
-#define STEEPING_MINS 5   // minutes
+#define STEEPING_MINS 0.1   // minutes
 unsigned long startMillis;
 unsigned long currentMillis;
 const unsigned long steepingTime = STEEPING_MINS*60*1000;
@@ -136,7 +156,7 @@ void setup() {
   // PID
   // Initialize PID Variables
   thermTemp = analogRead(THERMISTOR);
-  waterTemp = 80;
+  waterTemp = 20;
 
 
   while (!Serial) { delay(10); }
@@ -228,7 +248,12 @@ void dispenseLeaf() {
     }
 
     delay(1000);
-    S_leaf.rotate(18*360);
+    //S_leaf.rotate(18*360);
+    while (leafHB == LOW)       // Go home
+    {
+      S_leaf.rotate(30);
+      leafHB = pcf.digitalRead(LEAF_LIMIT);
+    }
     delay(1000);
 
     for (i = 0; i < 100; i++) {   // Shake leaves into infuser
@@ -255,6 +280,15 @@ void T_junct(int pos) {
   delay(100);
 }
 
+int getThermTemp() {
+  Vo = analogRead(THERMISTOR);
+  R2 = R1 * (1023.0 / (float)Vo - 1.0);
+  logR2 = log(R2);
+  T = (1.0 / (c1 + c2*logR2 + c3*logR2*logR2*logR2));
+  T = T - 273.15;
+  return T;
+}
+
 void waterControl() {
   float teaVolume = 0;
   int thermC;
@@ -263,11 +297,11 @@ void waterControl() {
   digitalWrite(HEATER, HIGH);         // Turn ON Water Heater
 
   while (teaVolume < POUR_VOLUME) {
-    thermTemp = analogRead(THERMISTOR);
     steepingTemp.Compute();
     analogWrite(PUMP_0, pumpSpeed);   // PWM Pump Speed
 
-    thermC = map(((thermTemp - 20) * 3.04), 0, 1023, -40, 125);   // deffo gonna have to change this for thermistor
+    //thermC = map(((thermTemp - 20) * 3.04), 0, 1023, -40, 125);   // deffo gonna have to change this for thermistor
+    thermC = getThermTemp();
     if ((thermC > waterTemp - 5) && (thermC < waterTemp + 5)) {   // +/- 5degC 
       digitalWrite(SOLENOID, HIGH);   // Turn Solenoid ON
       teaVolume = teaVolume + map(pumpSpeed, 0, 255, 0, 3);       // mL/100ms [default PID sample rate]
@@ -296,6 +330,20 @@ void steepTea() {
 }
 
 void washCycle() {
+  T_junct(0);               // Close T
+  moveInfuser(2);           // Cleaning Position
+  delay(500);
+  infServo.write(INF_DUMP);
+  delay(1000);
+  digitalWrite(PUMP_2, HIGH);
+  delay(500);
+  digitalWrite(PUMP_2, LOW);
+  delay(5000);
+  T_junct(2);               // Waste T
+  delay(5000);
+  T_junct(0);
+  infServo.write(INF_UP);
+  moveInfuser(0);
   
 }
 
@@ -374,4 +422,34 @@ void demoRoutine() {
   //moveInfuser(2);       // Bring infuser up to cleaning pos
   S_inf.rotate(6*360);
   //washCycle();          // Clean machine for next cup
+}
+
+void infDemo() {
+  stepperHome();        // Home steppers
+  moveInfuser(1);       // Move to steeping pos
+  delay(1000);
+  moveInfuser(2);       // Move to cleaning pos
+  infServo.write(INF_DUMP);
+  delay(2000);
+  infServo.write(INF_UP);
+  moveInfuser(0);
+}
+
+void leafDemo() {
+  stepperHome();        // Home steppers
+  dispenseLeaf();
+}
+
+void T_Demo() {
+  T_junct(0);           // Close T_junction
+  delay(2000);
+  T_junct(1);           // Open T_junction
+  delay(2000);
+  T_junct(2);           // Waste
+  delay(2000);
+  T_junct(0);
+}
+
+void waterDemo() {
+  
 }
