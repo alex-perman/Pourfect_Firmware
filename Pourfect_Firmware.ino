@@ -20,6 +20,9 @@
 
 #include <PID_v1.h>
 
+#include "HX711.h"
+HX711 scale;
+
 //#include <rotaryDecoder.h>
 
 // Pin Definitions
@@ -55,7 +58,7 @@ Servo T_Servo;
 #define T_OPEN 165
 #define T_WASTE 0
 Servo infServo;
-#define INF_DUMP 145
+#define INF_DUMP 130
 #define INF_UP 0
 
 Adafruit_PCF8574 pcf;
@@ -85,6 +88,7 @@ int aLastState;
 #define BACKSPACE 7
 extern MenuItem* settingsMenu[];
 extern MenuItem* demoMenu[];
+extern MenuItem* aboutUs[];
 // Declare the call back function
 void toggleBacklight(uint16_t isOn);
 void backButton();
@@ -100,7 +104,7 @@ void waterDemo();
 MAIN_MENU(
   ITEM_COMMAND("Make Tea", preTeaMenu),
   ITEM_SUBMENU("Settings", settingsMenu),
-  ITEM_BASIC("About Us..."),
+  ITEM_SUBMENU("About Us...", aboutUs),
   ITEM_SUBMENU("DEMO", demoMenu)
 );
 // Settings Sub Menu
@@ -114,11 +118,22 @@ SUB_MENU(settingsMenu, mainMenu,
 );
 // Demo Sub Menu
 SUB_MENU(demoMenu, mainMenu, 
+  ITEM_COMMAND("Back...", backButton),
   ITEM_COMMAND("Infuser", infDemo),
   ITEM_COMMAND("Leaf", leafDemo),
   ITEM_COMMAND("T Junction", T_Demo),
   ITEM_COMMAND("Water", waterDemo),
   ITEM_COMMAND("Routine", demoRoutine)
+);
+// About Us
+SUB_MENU(aboutUs, mainMenu,
+  ITEM_BASIC("Pourfect Tea"),
+  ITEM_BASIC("IGEN430 2024"),
+  ITEM_BASIC("Logan Kahn"), 
+  ITEM_BASIC("Jordan Myers"),
+  ITEM_BASIC("Alex Perman"),
+  ITEM_BASIC("Jessie Zhu"),
+  ITEM_COMMAND("ඞ", backButton)
 );
 LcdMenu menu(LCD_ROWS, LCD_COLS);
 
@@ -148,8 +163,15 @@ void setup() {
   T_Servo.attach(SERVO_0);
   infServo.attach(SERVO_1);
 
-  pinMode(INF_LIMIT, INPUT);
+  pinMode(PUMP_0, OUTPUT);
+  pinMode(PUMP_1, OUTPUT);
+  pinMode(PUMP_2, OUTPUT);
+  scale.begin(LC_DOUT, LC_SCK);
+  pinMode(SOLENOID, OUTPUT);
+  pinMode(HEATER, OUTPUT);
+  pinMode(INT, INPUT);
   pinMode(LEAF_LIMIT, INPUT);
+  pinMode(INF_LIMIT, INPUT);
 
   menu.setupLcdWithMenu(0x20, mainMenu);
 
@@ -172,6 +194,9 @@ void setup() {
 //  }
    // Reads the initial state of the outputA
    aLastState = pcf.digitalRead(RE_CLK); 
+
+   infServo.write(INF_UP);
+   T_Servo.write(T_CLOSED);
 }
 
 void stepperHome() {
@@ -249,6 +274,7 @@ void dispenseLeaf() {
 
     delay(1000);
     //S_leaf.rotate(18*360);
+    int leafHB = pcf.digitalRead(LEAF_LIMIT);
     while (leafHB == LOW)       // Go home
     {
       S_leaf.rotate(30);
@@ -267,14 +293,13 @@ void dispenseLeaf() {
 }
 
 void T_junct(int pos) {
-  if (pos = 0) {
+  if (pos == 0) {
     T_Servo.write(T_CLOSED);
   }
-  else if (pos = 1) {
-    T_Servo.write(T_OPEN);
-    delay(1000);             // wait 2s
+  else if (pos == 1) {
+    T_Servo.write(T_OPEN);            // wait 2s
   }
-  else if (pos = 2) {
+  else if (pos == 2) {
     T_Servo.write(T_WASTE);
   }
   delay(100);
@@ -343,7 +368,7 @@ void washCycle() {
   delay(5000);
   T_junct(0);
   infServo.write(INF_UP);
-  moveInfuser(0);
+  stepperHome();
   
 }
 
@@ -432,7 +457,13 @@ void infDemo() {
   infServo.write(INF_DUMP);
   delay(2000);
   infServo.write(INF_UP);
-  moveInfuser(0);
+  int infHB = pcf.digitalRead(INF_LIMIT); 
+  while (infHB == LOW)
+  {
+    //backwards slowly till it hits the switch and stops
+    S_inf.rotate(30);
+    infHB = pcf.digitalRead(INF_LIMIT);
+  }
 }
 
 void leafDemo() {
@@ -451,5 +482,24 @@ void T_Demo() {
 }
 
 void waterDemo() {
+  stepperHome();
+  T_junct(0);
+  delay(2000);
+  digitalWrite(SOLENOID, HIGH);
+//  analogWrite(PUMP_0, 127);
+  delay(2000);
+  analogWrite(PUMP_0, 255);
+  delay(4000);
+  analogWrite(PUMP_0, 0);
+  delay(1000);
+  digitalWrite(SOLENOID, LOW);
+  delay(2000);
+  digitalWrite(PUMP_1, HIGH);
+  delay(1000);
+  digitalWrite(PUMP_1, LOW);
+  T_junct(1);
+  delay(2000);
+  T_junct(0);
+  washCycle();
   
 }
