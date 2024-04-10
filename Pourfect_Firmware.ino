@@ -99,6 +99,8 @@ void infDemo();
 void leafDemo();
 void T_Demo();
 void waterDemo();
+void leafEject();
+void leafLoad();
 
 // Define Main Menu
 MAIN_MENU(
@@ -114,6 +116,8 @@ SUB_MENU(settingsMenu, mainMenu,
   ITEM_BASIC("Steeping Temp"),
   ITEM_BASIC("Cleaning Cycle"),
   ITEM_COMMAND("Home Steppers", stepperHome),
+  ITEM_COMMAND("Leaf Eject", leafEject),
+  ITEM_COMMAND("Leaf Load", leafLoad),
   ITEM_TOGGLE("Backlight", toggleBacklight)
 );
 // Demo Sub Menu
@@ -159,7 +163,7 @@ const unsigned long steepingTime = STEEPING_MINS*60*1000;
 
 void setup() {
   S_leaf.begin(150, 1);
-  S_inf.begin(100, 1);
+  S_inf.begin(150, 1);
   T_Servo.attach(SERVO_0);
   infServo.attach(SERVO_1);
 
@@ -232,7 +236,7 @@ void moveInfuser(int pos) {
     inf_pos = 0;      // Home position
   }
   else if (pos == 1) {
-    inf_pos = -6*360;   // Steeping Position
+    inf_pos = -7.5*360;   // Steeping Position
   }
   else if (pos == 2) {
     inf_pos = -2.75*360;   // Cleaning Position
@@ -261,7 +265,7 @@ void moveInfuser(int pos) {
 
 void dispenseLeaf() {
   if (leaf_disp == 0) {
-    S_leaf.rotate(-18*360);
+    S_leaf.rotate(-17.5*360);
     delay(1000);
     
     int i;
@@ -297,12 +301,12 @@ void T_junct(int pos) {
     T_Servo.write(T_CLOSED);
   }
   else if (pos == 1) {
-    T_Servo.write(T_OPEN);            // wait 2s
+    T_Servo.write(T_OPEN);
   }
   else if (pos == 2) {
     T_Servo.write(T_WASTE);
   }
-  delay(100);
+  delay(1000);
 }
 
 int getThermTemp() {
@@ -314,7 +318,7 @@ int getThermTemp() {
   return T;
 }
 
-void waterControl() {
+void waterControlPID() {
   float teaVolume = 0;
   int thermC;
   steepingTemp.SetMode(AUTOMATIC);    // Turn ON PID
@@ -341,16 +345,29 @@ void waterControl() {
   analogWrite(PUMP_0, 0);         // Turn OFF Pump
 }
 
+void waterControlOL() {
+  delay(1000);                        // Delay for fun?
+  digitalWrite(HEATER, HIGH);         // Turn ON Water Heater
+
+  analogWrite(PUMP_0, 255);   // Full Pump Speed
+  delay(2000);
+  digitalWrite(SOLENOID, HIGH);   // Turn Solenoid ON
+  delay(8300);                    // 250mL @ full power (255)
+  analogWrite(PUMP_0, 0);         // Pump OFF
+  digitalWrite(SOLENOID, LOW);    // Solenoid OFF
+  digitalWrite(HEATER, LOW);      // Heater OFF
+  delay(500);
+}
+
 void steepTea() {
   startMillis = millis();
   currentMillis = millis();
 
   digitalWrite(PUMP_1, HIGH);
-  delay(5000);      // wait for pump to clear water from lines
+  delay(2000);      // wait for pump to clear water from lines
   digitalWrite(PUMP_1, LOW);
 
-  while (currentMillis - startMillis < steepingTime) {
-  }
+  while (currentMillis - startMillis < steepingTime) { currentMillis = millis(); }
 
 }
 
@@ -360,9 +377,9 @@ void washCycle() {
   delay(500);
   infServo.write(INF_DUMP);
   delay(1000);
-  digitalWrite(PUMP_2, HIGH);
+  //digitalWrite(PUMP_2, HIGH);
   delay(500);
-  digitalWrite(PUMP_2, LOW);
+  //digitalWrite(PUMP_2, LOW);
   delay(5000);
   T_junct(2);               // Waste T
   delay(5000);
@@ -378,9 +395,11 @@ void makeTea() {
   dispenseLeaf();       // Portion leaves into infuser
   T_junct(0);           // Close T_junction
   moveInfuser(1);       // Lower infuser to steeping position
-  waterControl();       // Water pump & PID
+  //waterControlPID();    // Water pump & PID
+  waterControlOL();     // Open Loop Water
   steepTea();           // Blow out lines and steep tea for steeping time
   T_junct(1);           // Pour steeped tea into cup
+  delay(2000);
   T_junct(0);           // Close T-Junction
   moveInfuser(2);       // Bring infuser up to cleaning pos
   washCycle();          // Clean machine for next cup
@@ -428,10 +447,15 @@ void loop() {
 
 // LCD COMMANDS
 void toggleBacklight(uint16_t isOn) { menu.setBacklight(isOn); }
-void backButton() {processMenuCommand(menu, BACK, UP, DOWN, LEFT, RIGHT, ENTER, BACK, CLEAR, BACKSPACE); }
+void backButton() { processMenuCommand(menu, BACK, UP, DOWN, LEFT, RIGHT, ENTER, BACK, CLEAR, BACKSPACE); }
 void preTeaMenu() {
   Serial.println("Making Tea!");
+  makeTea();
 }
+void leafEject() { S_leaf.rotate(-35*360); }
+void leafLoad() { stepperHome(); }
+
+// DEMOS
 void demoRoutine() {
   stepperHome();        // Home steppers
   moveInfuser(0);       // Raise infuser to load leaves
@@ -474,11 +498,11 @@ void leafDemo() {
 void T_Demo() {
   T_junct(0);           // Close T_junction
   delay(2000);
-  T_junct(1);           // Open T_junction
-  delay(2000);
   T_junct(2);           // Waste
   delay(2000);
-  T_junct(0);
+  T_junct(1);           // Cup
+  delay(2000);
+  T_junct(0);           // Close
 }
 
 void waterDemo() {
