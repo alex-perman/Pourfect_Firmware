@@ -13,6 +13,7 @@
 #include <ItemToggle.h>
 #include <ItemInput.h>
 #include <ItemCommand.h>
+#include <ItemInput.h>
 #include <LcdMenu.h>
 #include <utils/commandProccesors.h>
 
@@ -58,7 +59,7 @@ Servo T_Servo;
 #define T_OPEN 165
 #define T_WASTE 0
 Servo infServo;
-#define INF_DUMP 130
+#define INF_DUMP 145 
 #define INF_UP 0
 
 Adafruit_PCF8574 pcf;
@@ -101,6 +102,9 @@ void T_Demo();
 void waterDemo();
 void leafEject();
 void leafLoad();
+void toggleCleaning(uint16_t isOn);
+bool cleaningFlag = 1;
+void setSteepingTime(int* value);
 
 // Define Main Menu
 MAIN_MENU(
@@ -112,9 +116,9 @@ MAIN_MENU(
 // Settings Sub Menu
 SUB_MENU(settingsMenu, mainMenu,
   ITEM_COMMAND("Back...", backButton),
-  ITEM_BASIC("Steeping Time"),
+  ITEM_INPUT("Steep Time", 10, setSteepingTime),
   ITEM_BASIC("Steeping Temp"),
-  ITEM_BASIC("Cleaning Cycle"),
+  ITEM_TOGGLE("Cleaning", toggleCleaning),
   ITEM_COMMAND("Home Steppers", stepperHome),
   ITEM_COMMAND("Leaf Eject", leafEject),
   ITEM_COMMAND("Leaf Load", leafLoad),
@@ -151,7 +155,7 @@ double Kp=2, Ki=0, Kd=0;
 PID steepingTemp(&thermTemp, &pumpSpeed, &waterTemp, Kp, Ki, Kd, DIRECT);
 #define POUR_VOLUME 250   // mL of tea steeped
 
-#define STEEPING_MINS 0.1   // minutes
+#define STEEPING_MINS 0.5   // minutes
 unsigned long startMillis;
 unsigned long currentMillis;
 const unsigned long steepingTime = STEEPING_MINS*60*1000;
@@ -239,7 +243,7 @@ void moveInfuser(int pos) {
     inf_pos = -7.5*360;   // Steeping Position
   }
   else if (pos == 2) {
-    inf_pos = -2.75*360;   // Cleaning Position
+    inf_pos = -2.65*360;   // Cleaning Position
   }
 
   if (inf_disp < inf_pos) {
@@ -352,8 +356,11 @@ void waterControlOL() {
   analogWrite(PUMP_0, 255);   // Full Pump Speed
   delay(2000);
   digitalWrite(SOLENOID, HIGH);   // Turn Solenoid ON
-  delay(8300);                    // 250mL @ full power (255)
+  delay(34722);                    // 250mL @ full power (255) // ya no nvm
   analogWrite(PUMP_0, 0);         // Pump OFF
+  digitalWrite(PUMP_1, HIGH);
+  delay(2000);
+  digitalWrite(PUMP_1, LOW);
   digitalWrite(SOLENOID, LOW);    // Solenoid OFF
   digitalWrite(HEATER, LOW);      // Heater OFF
   delay(500);
@@ -364,7 +371,7 @@ void steepTea() {
   currentMillis = millis();
 
   digitalWrite(PUMP_1, HIGH);
-  delay(2000);      // wait for pump to clear water from lines
+  delay(1000);      // wait for pump to clear water from lines
   digitalWrite(PUMP_1, LOW);
 
   while (currentMillis - startMillis < steepingTime) { currentMillis = millis(); }
@@ -372,21 +379,22 @@ void steepTea() {
 }
 
 void washCycle() {
-  T_junct(0);               // Close T
-  moveInfuser(2);           // Cleaning Position
-  delay(500);
-  infServo.write(INF_DUMP);
-  delay(1000);
-  //digitalWrite(PUMP_2, HIGH);
-  delay(500);
-  //digitalWrite(PUMP_2, LOW);
-  delay(5000);
-  T_junct(2);               // Waste T
-  delay(5000);
-  T_junct(0);
-  infServo.write(INF_UP);
-  stepperHome();
-  
+  if (cleaningFlag) {
+    T_junct(0);               // Close T
+    moveInfuser(2);           // Cleaning Position
+    delay(500);
+    infServo.write(INF_DUMP);
+    delay(1000);
+    //digitalWrite(PUMP_2, HIGH);
+    delay(2000);
+    //digitalWrite(PUMP_2, LOW);
+    delay(5000);
+    T_junct(2);               // Waste T
+    delay(5000);
+    T_junct(0);
+    infServo.write(INF_UP);
+    stepperHome();
+  }
 }
 
 void makeTea() {
@@ -452,8 +460,20 @@ void preTeaMenu() {
   Serial.println("Making Tea!");
   makeTea();
 }
+void toggleCleaning(uint16_t isOn) {
+  if (cleaningFlag) {
+    cleaningFlag = 0;
+  }
+  else {
+    cleaningFlag = 1;
+  }
+}
 void leafEject() { S_leaf.rotate(-35*360); }
 void leafLoad() { stepperHome(); }
+void setSteepingTime(int* value) {
+  //steepingTime = value*1000;
+  backButton();
+}
 
 // DEMOS
 void demoRoutine() {
